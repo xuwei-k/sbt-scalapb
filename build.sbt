@@ -23,8 +23,8 @@ releasePublishArtifactsAction <<= releasePublishArtifactsAction.dependsOn(
 // The version for the *plugin* is in version.sbt.
 val scalaPbVersion = "0.5.14"
 
-libraryDependencies ++= Seq(
-  "com.trueaccord.scalapb" %% "compilerplugin" % scalaPbVersion
+val root = Project("sbt-scalapb", file(".")).dependsOn(
+  ProjectRef(file("ScalaPB"), "compilerPlugin")
 )
 
 pomExtra in ThisBuild := {

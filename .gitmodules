@@ -1,0 +1,3 @@
+[submodule "ScalaPB"]
+	path = ScalaPB
+	url = git@github.com:xuwei-k/ScalaPB.git
