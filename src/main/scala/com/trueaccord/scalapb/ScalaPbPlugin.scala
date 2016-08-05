@@ -5,7 +5,7 @@ package com.trueaccord.scalapb
 
 import java.io.File
 
-import com.trueaccord.scalapb.compiler.{PosixProtocDriver, WindowsProtocDriver, ProtocDriver}
+import protocbridge._
 import sbt.Keys._
 import sbt._
 import sbtprotobuf.{ProtobufPlugin => PB}
@@ -29,7 +29,7 @@ object ScalaPbPlugin extends Plugin {
 
   val protobufConfig = PB.protobufConfig
 
-  val protocDriver = TaskKey[ProtocDriver]("scalapb-protoc-driver", "Protoc driver")
+  val protocFrontend = TaskKey[PluginFrontend]("scalapb-protoc-frontend", "Protoc frontend")
 
   val protobufSettings = PB.protobufSettings ++ inConfig(protobufConfig)(Seq[Setting[_]](
     scalaSource <<= (sourceManaged in Compile) { _ / "compiled_protobuf" },
@@ -40,7 +40,7 @@ object ScalaPbPlugin extends Plugin {
     singleLineToString := false,
     scalapbVersion := com.trueaccord.scalapb.plugin.Version.scalaPbVersion,
     pythonExecutable := "python",
-    protocDriver <<= protocDriverTask,
+    protocFrontend <<= protocFrontendTask,
     generatedTargets <<= (javaConversions in PB.protobufConfig,
       javaSource in PB.protobufConfig, scalaSource in PB.protobufConfig) {
       (javaConversions, javaSource, scalaSource) =>
@@ -53,26 +53,24 @@ object ScalaPbPlugin extends Plugin {
     version := "2.6.1",
     // Set protobuf's runProtoc runner with our runner..
     runProtoc <<= (protoc, streams) map ((cmd, s) => args => Process(cmd, args) ! s.log),
-    PB.runProtoc := protocDriver.value.buildRunner((runProtoc in PB.protobufConfig).value),
-    protocOptions <++= (generatedTargets in protobufConfig,
-                        javaConversions in protobufConfig,
-                        flatPackage in protobufConfig,
-                        grpc in protobufConfig,
-                        singleLineToString in protobufConfig) {
-      (generatedTargets, javaConversions, flatPackage, grpc, singleLineToString) =>
-      def makeParams(params: (Boolean, String)*) = params
-        .collect {
-          case (true, paramName) => paramName
-        }.mkString(",")
-      generatedTargets.find(_._2.endsWith(".scala")) match {
-        case Some(targetForScala) =>
-          val params = makeParams(
-            javaConversions -> "java_conversions",
-            flatPackage -> "flat_package",
-            grpc -> "grpc",
-            singleLineToString -> "single_line_to_string")
-          Seq(s"--scala_out=$params:${targetForScala._1.absolutePath}")
-        case None => Nil
+    PB.runProtoc := { params =>
+      (generatedTargets in protobufConfig).value.find(_._2.endsWith(".scala")).map(_._1) match {
+        case Some(target) =>
+          // TODO singleLineToString
+          val gen = scalapb.generator(
+            flatPackage = (flatPackage in protobufConfig).value,
+            javaConversions = (javaConversions in protobufConfig).value,
+            grpc = (grpc in protobufConfig).value
+          )
+          ProtocBridge.run(
+            protoc = (runProtoc in PB.protobufConfig).value,
+            params = params,
+            generatorParams = GeneratorParam(gen, target) :: Nil,
+            pluginFrontend = protocFrontend.value
+          )
+        case None =>
+          streams.value.log.info("not fould")
+          0
       }
     })) ++ Seq[Setting[_]](
     libraryDependencies <++= (scalapbVersion in protobufConfig) {
@@ -84,9 +82,9 @@ object ScalaPbPlugin extends Plugin {
 
   private def isWindows: Boolean = sys.props("os.name").startsWith("Windows")
 
-  private def protocDriverTask = (pythonExecutable in protobufConfig) map {
+  private def protocFrontendTask = (pythonExecutable in protobufConfig) map {
     pythonExecutable =>
-      if (isWindows) new WindowsProtocDriver(pythonExecutable)
-      else new PosixProtocDriver
+      if (isWindows) new WindowsPluginFrontend(pythonExecutable)
+      else PosixPluginFrontend
   }
 }

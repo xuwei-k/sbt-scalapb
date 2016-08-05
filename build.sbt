@@ -8,6 +8,8 @@ organization := "com.trueaccord.scalapb"
 
 name := "sbt-scalapb"
 
+scalacOptions += "-deprecation"
+
 addSbtPlugin("com.github.gseitz" % "sbt-protobuf" % "0.5.2")
 
 releasePublishArtifactsAction := PgpKeys.publishSigned.value
